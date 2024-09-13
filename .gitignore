@@ -1,0 +1,14 @@
+# Ambiente virtual
+venv/
+
+# Arquivos de configuração sensíveis
+.env
+
+# Caches e arquivos temporários
+__pycache__/
+*.py[cod]
+
+# Arquivos gerados
+uploads/
+*.xlsx
+*.dbf
