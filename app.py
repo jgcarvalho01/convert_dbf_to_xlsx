@@ -1,27 +1,29 @@
-from flask import Flask, request, redirect, url_for, render_template, Response
-import io
+from io import BytesIO
+from flask import Flask, request, redirect, url_for, render_template, send_file
 import pandas as pd
 from dbfread import DBF
-from openpyxl import Workbook
 
 app = Flask(__name__)
 
-app.config['ALLOWED_EXTENSIONS'] = {'dbf'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
 def dbf_to_xlsx_buffer(dbf_file):
-    # Ler o arquivo DBF com codificação definida
-    table = DBF(dbf_file, encoding='latin1')
+    # Criar um buffer para armazenar o arquivo XLSX
+    xlsx_buffer = BytesIO()
+    
+    # Salvar o arquivo DBF temporariamente
+    temp_dbf_path = "/tmp/temp.dbf"
+    with open(temp_dbf_path, 'wb') as temp_dbf_file:
+        temp_dbf_file.write(dbf_file.read())
+    
+    # Ler o arquivo DBF
+    table = DBF(temp_dbf_path, encoding='latin1')
     df = pd.DataFrame(iter(table))
     
-    # Criar um buffer em memória para o arquivo XLSX
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    # Salvar o DataFrame como um arquivo XLSX no buffer
+    with pd.ExcelWriter(xlsx_buffer, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
-    output.seek(0)
-    return output
+    
+    xlsx_buffer.seek(0)  # Voltar ao início do buffer
+    return xlsx_buffer
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -32,17 +34,17 @@ def index():
         if file.filename == '':
             return redirect(request.url)
         if file and allowed_file(file.filename):
-            # Converter DBF para XLSX e obter o buffer de memória
             xlsx_buffer = dbf_to_xlsx_buffer(file)
-            
-            # Preparar a resposta para o download
-            return Response(
+            return send_file(
                 xlsx_buffer,
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                headers={"Content-Disposition": "attachment;filename=converted.xlsx"}
+                as_attachment=True,
+                download_name=file.filename.rsplit('.', 1)[0] + '.xlsx',
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-    
     return render_template('index.html')
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'dbf'}
 
 if __name__ == '__main__':
     app.run(debug=True)
